@@ -1,6 +1,5 @@
 streamlit
 transformers
 torch
-speechrecognition
 nltk
 pydub
