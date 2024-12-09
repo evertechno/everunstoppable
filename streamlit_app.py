@@ -1,41 +1,56 @@
 import streamlit as st
 import torch
-from transformers import pipeline
+from transformers import pipeline, Wav2Vec2Processor, Wav2Vec2ForCTC
 import nltk
 from nltk.tokenize import word_tokenize
-import speech_recognition as sr
+from io import BytesIO
+from pydub import AudioSegment
 
 # Download necessary NLTK corpora at runtime (this is the only external request needed)
 nltk.download('punkt')
 nltk.download('stopwords')
 
-# Load sentiment analysis model from Hugging Face
+# Load the Wav2Vec2 model for ASR
+@st.cache_resource
+def load_asr_model():
+    processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-960h")
+    model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-960h")
+    return processor, model
+
+# Load the sentiment analysis model
 @st.cache_resource
 def load_sentiment_model():
     sentiment_model = pipeline("sentiment-analysis")  # Automatically downloads model from HuggingFace
     return sentiment_model
 
-# Transcribe audio using Google Web Speech API
+# Convert MP3 to WAV using pydub
+def mp3_to_wav(uploaded_file):
+    audio = AudioSegment.from_mp3(uploaded_file)
+    wav_file = BytesIO()
+    audio.export(wav_file, format="wav")
+    wav_file.seek(0)
+    return wav_file
+
+# Transcribe audio using Wav2Vec2
 def transcribe_audio(uploaded_file):
-    recognizer = sr.Recognizer()
+    processor, model = load_asr_model()
     
-    # Convert the uploaded file to audio format supported by SpeechRecognition
-    with open("temp_audio.wav", "wb") as f:
-        f.write(uploaded_file.getbuffer())
-    
-    with sr.AudioFile("temp_audio.wav") as source:
-        audio = recognizer.record(source)
-        
-        try:
-            # Using Google Web Speech API for transcription
-            transcription = recognizer.recognize_google(audio)
-            return transcription
-        except sr.UnknownValueError:
-            return "Sorry, could not understand the audio."
-        except sr.RequestError:
-            return "Sorry, there was an error with the speech recognition service."
-    # Cleanup after transcription
-    os.remove("temp_audio.wav")
+    # Convert MP3 to WAV format
+    wav_file = mp3_to_wav(uploaded_file)
+
+    # Load audio as numpy array
+    import numpy as np
+    audio_input = np.frombuffer(wav_file.read(), np.int16)
+
+    # Use processor to convert audio into the correct input format for Wav2Vec2
+    inputs = processor(audio_input, return_tensors="pt", sampling_rate=16000)
+    logits = model(input_values=inputs.input_values).logits
+
+    # Decode the predicted ids to text
+    predicted_ids = torch.argmax(logits, dim=-1)
+    transcription = processor.batch_decode(predicted_ids)
+
+    return transcription[0]
 
 # Analyze sentiment and keywords
 def analyze_transcription(text):
