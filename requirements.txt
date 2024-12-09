@@ -1,6 +1,6 @@
 streamlit
 transformers
 torch
-coqui-ai
+speechrecognition
 nltk
 pydub
