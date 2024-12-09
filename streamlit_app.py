@@ -4,7 +4,7 @@ from transformers import pipeline, Wav2Vec2Processor, Wav2Vec2ForCTC
 import nltk
 from nltk.tokenize import word_tokenize
 from io import BytesIO
-from pydub import AudioSegment
+import numpy as np
 
 # Download necessary NLTK corpora at runtime (this is the only external request needed)
 nltk.download('punkt')
@@ -23,24 +23,12 @@ def load_sentiment_model():
     sentiment_model = pipeline("sentiment-analysis")  # Automatically downloads model from HuggingFace
     return sentiment_model
 
-# Convert MP3 to WAV using pydub
-def mp3_to_wav(uploaded_file):
-    audio = AudioSegment.from_mp3(uploaded_file)
-    wav_file = BytesIO()
-    audio.export(wav_file, format="wav")
-    wav_file.seek(0)
-    return wav_file
-
 # Transcribe audio using Wav2Vec2
 def transcribe_audio(uploaded_file):
     processor, model = load_asr_model()
-    
-    # Convert MP3 to WAV format
-    wav_file = mp3_to_wav(uploaded_file)
 
     # Load audio as numpy array
-    import numpy as np
-    audio_input = np.frombuffer(wav_file.read(), np.int16)
+    audio_input = np.frombuffer(uploaded_file.read(), np.int16)
 
     # Use processor to convert audio into the correct input format for Wav2Vec2
     inputs = processor(audio_input, return_tensors="pt", sampling_rate=16000)
@@ -70,8 +58,8 @@ def analyze_transcription(text):
 def main():
     st.title("Customer Support Call Transcription and Analysis")
     
-    # File uploader
-    uploaded_file = st.file_uploader("Upload a Customer Support Call Recording", type=["mp3", "wav", "flac"])
+    # File uploader for WAV files only
+    uploaded_file = st.file_uploader("Upload a Customer Support Call Recording (WAV file only)", type=["wav"])
 
     if uploaded_file is not None:
         st.write(f"File uploaded: {uploaded_file.name}")
