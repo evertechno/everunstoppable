@@ -1,14 +1,17 @@
 import streamlit as st
 import torch
-from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC, pipeline
+from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
+import google.generativeai as genai
+import numpy as np
 import nltk
 from nltk.tokenize import word_tokenize
-from io import BytesIO
-import numpy as np
 
 # Download necessary NLTK corpora at runtime
 nltk.download('punkt')
 nltk.download('stopwords')
+
+# Configure the Google Gemini API key from Streamlit's secrets
+genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 
 # Load the Wav2Vec2 model for ASR
 @st.cache_resource
@@ -16,12 +19,6 @@ def load_asr_model():
     processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-960h")
     model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-960h")
     return processor, model
-
-# Load the sentiment analysis model
-@st.cache_resource
-def load_sentiment_model():
-    sentiment_model = pipeline("sentiment-analysis")  # Automatically downloads model from HuggingFace
-    return sentiment_model
 
 # Transcribe audio using Wav2Vec2
 def transcribe_audio(uploaded_file):
@@ -40,49 +37,35 @@ def transcribe_audio(uploaded_file):
 
     return transcription[0]
 
-# Analyze sentiment and keywords
-def analyze_transcription(text):
-    sentiment_model = load_sentiment_model()
-    sentiment = sentiment_model(text)
-    sentiment_score = sentiment[0]["label"]
-    sentiment_confidence = sentiment[0]["score"]
+# Function to analyze transcription using Google Gemini AI
+def analyze_transcription_with_ai(transcription_text):
+    # Generate a prompt for the AI to analyze the transcription
+    analysis_prompt = f"Analyze this customer support call transcription: {transcription_text}. Provide sentiment, tone, and keywords from the text."
 
-    # Simple keyword extraction using NLTK
-    stop_words = set(nltk.corpus.stopwords.words('english'))
-    word_tokens = word_tokenize(text)
-    keywords = [word for word in word_tokens if word.lower() not in stop_words and word.isalpha()]
+    # Generate response (analysis) from Gemini AI
+    response = genai.GenerativeModel("gemini-1.5-flash").generate_content(analysis_prompt)
+    return response.text
 
-    return sentiment_score, sentiment_confidence, keywords
-
-# Streamlit app
+# Streamlit app UI
 def main():
-    st.title("Customer Support Call Transcription and Analysis")
-    
+    st.title("Ever AI - Call Transcription and Analysis")
+    st.write("Upload your customer support call recording (WAV format only) for transcription and analysis.")
+
     # File uploader for WAV files only
-    uploaded_file = st.file_uploader("Upload a Customer Support Call Recording (WAV file only)", type=["wav"])
+    uploaded_file = st.file_uploader("Upload a WAV file", type=["wav"])
 
     if uploaded_file is not None:
         st.write(f"File uploaded: {uploaded_file.name}")
         
-        # Transcribe audio file
+        # Transcribe the uploaded audio file
         st.subheader("Transcription")
         transcription = transcribe_audio(uploaded_file)
         st.write(transcription)
 
-        # Sentiment analysis and keyword extraction
-        st.subheader("Sentiment Analysis and Keywords")
-        sentiment, confidence, keywords = analyze_transcription(transcription)
-        st.write(f"Sentiment: {sentiment} (Confidence: {confidence*100:.2f}%)")
-        st.write(f"Extracted Keywords: {', '.join(keywords)}")
-
-        # Support metrics evaluation
-        st.subheader("Support Metrics Evaluation")
-        if sentiment == "POSITIVE":
-            st.write("The call is likely to be a positive support interaction.")
-        elif sentiment == "NEGATIVE":
-            st.write("The call indicates a negative support experience.")
-        else:
-            st.write("Neutral sentiment detected in the call.")
+        # Analyze the transcription using Gemini AI
+        st.subheader("Analysis of Transcription")
+        analysis_result = analyze_transcription_with_ai(transcription)
+        st.write(analysis_result)
 
 if __name__ == "__main__":
     main()
