@@ -4,7 +4,6 @@ from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC
 import google.generativeai as genai
 import numpy as np
 import nltk
-from nltk.tokenize import word_tokenize
 
 # Download necessary NLTK corpora at runtime
 nltk.download('punkt')
