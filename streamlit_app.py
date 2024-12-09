@@ -1,12 +1,12 @@
 import streamlit as st
 import torch
-from transformers import pipeline, Wav2Vec2Processor, Wav2Vec2ForCTC
+from transformers import Wav2Vec2Processor, Wav2Vec2ForCTC, pipeline
 import nltk
 from nltk.tokenize import word_tokenize
 from io import BytesIO
 import numpy as np
 
-# Download necessary NLTK corpora at runtime (this is the only external request needed)
+# Download necessary NLTK corpora at runtime
 nltk.download('punkt')
 nltk.download('stopwords')
 
