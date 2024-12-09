@@ -15,35 +15,50 @@ genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 # Load the Wav2Vec2 model for ASR
 @st.cache_resource
 def load_asr_model():
-    processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-960h")
-    model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-960h")
-    return processor, model
+    try:
+        processor = Wav2Vec2Processor.from_pretrained("facebook/wav2vec2-large-960h")
+        model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-large-960h")
+        return processor, model
+    except Exception as e:
+        st.error(f"Error loading ASR model: {e}")
+        return None, None
 
 # Transcribe audio using Wav2Vec2
 def transcribe_audio(uploaded_file):
-    processor, model = load_asr_model()
+    try:
+        processor, model = load_asr_model()
 
-    # Load audio as numpy array
-    audio_input = np.frombuffer(uploaded_file.read(), np.int16)
+        if processor is None or model is None:
+            return "Error loading model."
 
-    # Use processor to convert audio into the correct input format for Wav2Vec2
-    inputs = processor(audio_input, return_tensors="pt", sampling_rate=16000)
-    logits = model(input_values=inputs.input_values).logits
+        # Load audio as numpy array
+        audio_input = np.frombuffer(uploaded_file.read(), np.int16)
 
-    # Decode the predicted ids to text
-    predicted_ids = torch.argmax(logits, dim=-1)
-    transcription = processor.batch_decode(predicted_ids)
+        # Use processor to convert audio into the correct input format for Wav2Vec2
+        inputs = processor(audio_input, return_tensors="pt", sampling_rate=16000)
+        logits = model(input_values=inputs.input_values).logits
 
-    return transcription[0]
+        # Decode the predicted ids to text
+        predicted_ids = torch.argmax(logits, dim=-1)
+        transcription = processor.batch_decode(predicted_ids)
+
+        return transcription[0]
+    except Exception as e:
+        st.error(f"Error during transcription: {e}")
+        return "Error during transcription."
 
 # Function to analyze transcription using Google Gemini AI
 def analyze_transcription_with_ai(transcription_text):
-    # Generate a prompt for the AI to analyze the transcription
-    analysis_prompt = f"Analyze this customer support call transcription: {transcription_text}. Provide sentiment, tone, and keywords from the text."
+    try:
+        # Generate a prompt for the AI to analyze the transcription
+        analysis_prompt = f"Analyze this customer support call transcription: {transcription_text}. Provide sentiment, tone, and keywords from the text."
 
-    # Generate response (analysis) from Gemini AI
-    response = genai.GenerativeModel("gemini-1.5-flash").generate_content(analysis_prompt)
-    return response.text
+        # Generate response (analysis) from Gemini AI
+        response = genai.GenerativeModel("gemini-1.5-flash").generate_content(analysis_prompt)
+        return response.text
+    except Exception as e:
+        st.error(f"Error during analysis: {e}")
+        return "Error during analysis."
 
 # Streamlit app UI
 def main():
@@ -55,16 +70,17 @@ def main():
 
     if uploaded_file is not None:
         st.write(f"File uploaded: {uploaded_file.name}")
-        
+
         # Transcribe the uploaded audio file
         st.subheader("Transcription")
         transcription = transcribe_audio(uploaded_file)
         st.write(transcription)
 
-        # Analyze the transcription using Gemini AI
-        st.subheader("Analysis of Transcription")
-        analysis_result = analyze_transcription_with_ai(transcription)
-        st.write(analysis_result)
+        if transcription != "Error during transcription.":
+            # Analyze the transcription using Gemini AI
+            st.subheader("Analysis of Transcription")
+            analysis_result = analyze_transcription_with_ai(transcription)
+            st.write(analysis_result)
 
 if __name__ == "__main__":
     main()
