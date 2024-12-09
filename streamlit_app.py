@@ -1,20 +1,13 @@
 import streamlit as st
 import torch
 from transformers import pipeline
-from coqui.ai import Model
 import nltk
 from nltk.tokenize import word_tokenize
-import os
+import speech_recognition as sr
 
 # Download necessary NLTK corpora at runtime (this is the only external request needed)
 nltk.download('punkt')
 nltk.download('stopwords')
-
-# Load ASR model from Coqui
-@st.cache_resource
-def load_asr_model():
-    model = Model.from_pretrained("coqui-ai/coop_stt_en")  # Download this model automatically
-    return model
 
 # Load sentiment analysis model from Hugging Face
 @st.cache_resource
@@ -22,14 +15,27 @@ def load_sentiment_model():
     sentiment_model = pipeline("sentiment-analysis")  # Automatically downloads model from HuggingFace
     return sentiment_model
 
-# Transcribe audio
+# Transcribe audio using Google Web Speech API
 def transcribe_audio(uploaded_file):
-    model = load_asr_model()
+    recognizer = sr.Recognizer()
+    
+    # Convert the uploaded file to audio format supported by SpeechRecognition
     with open("temp_audio.wav", "wb") as f:
         f.write(uploaded_file.getbuffer())
-    transcription = model.transcribe("temp_audio.wav")
-    os.remove("temp_audio.wav")  # Cleanup after transcription
-    return transcription["text"]
+    
+    with sr.AudioFile("temp_audio.wav") as source:
+        audio = recognizer.record(source)
+        
+        try:
+            # Using Google Web Speech API for transcription
+            transcription = recognizer.recognize_google(audio)
+            return transcription
+        except sr.UnknownValueError:
+            return "Sorry, could not understand the audio."
+        except sr.RequestError:
+            return "Sorry, there was an error with the speech recognition service."
+    # Cleanup after transcription
+    os.remove("temp_audio.wav")
 
 # Analyze sentiment and keywords
 def analyze_transcription(text):
